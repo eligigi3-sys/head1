@@ -1,9 +1,11 @@
 {
-  "name": "Head Cutout Cartoon MVP",
-  "short_name": "Head Cutout",
-  "start_url": "./",
+  "name": "Head Caricature Studio",
+  "short_name": "Caricature",
+  "start_url": ".",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#020617",
   "theme_color": "#111827",
+  "lang": "he",
+  "dir": "rtl",
   "icons": []
 }
