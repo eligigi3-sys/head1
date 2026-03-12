@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#111827" />
+    <title>Head Cutout Cartoon MVP</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>חיתוך ראש + שיער</h1>
+          <p class="subtitle">MVP וובי לאייפד: צילום, חיתוך ראש שקוף, ועיבוד קומיקסי.</p>
+        </div>
+        <button id="installBtn" class="secondary hidden" type="button">הוסף למסך הבית</button>
+      </header>
+
+      <section class="card controls-card">
+        <div class="control-row">
+          <label class="field">
+            <span>מצלמה</span>
+            <select id="cameraSelect"></select>
+          </label>
+
+          <label class="field compact">
+            <span>היפוך סלפי</span>
+            <input id="mirrorToggle" type="checkbox" checked />
+          </label>
+
+          <label class="field compact">
+            <span>אביזרים</span>
+            <input id="accessoriesToggle" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="control-row two-up">
+          <label class="field">
+            <span>עוצמת קומיקס</span>
+            <input id="posterizeRange" type="range" min="3" max="10" value="6" />
+          </label>
+          <label class="field">
+            <span>חוזק קווי מתאר</span>
+            <input id="edgeRange" type="range" min="10" max="140" value="55" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="startBtn" type="button">הפעל מצלמה</button>
+          <button id="captureBtn" type="button" disabled>צלם</button>
+          <label class="upload-btn" for="imageUpload">או העלה תמונה</label>
+          <input id="imageUpload" type="file" accept="image/*" hidden />
+          <button id="exportBtn" class="secondary" type="button" disabled>ייצוא PNG</button>
+        </div>
+
+        <p id="status" class="status">טוען מודל segmentation…</p>
+      </section>
+
+      <section class="grid">
+        <div class="card preview-card">
+          <h2>צילום</h2>
+          <div class="camera-stage">
+            <video id="video" playsinline autoplay muted></video>
+            <canvas id="overlayCanvas"></canvas>
+            <div class="head-guide">
+              <div class="guide-inner"></div>
+            </div>
+          </div>
+          <p class="hint">העמד את המצולם מול רקע לבן, מבט קדימה, head-and-shoulders.</p>
+        </div>
+
+        <div class="card result-card">
+          <h2>פלט</h2>
+          <div class="result-stack">
+            <div>
+              <h3>ראש שקוף</h3>
+              <canvas id="cutoutCanvas"></canvas>
+            </div>
+            <div>
+              <h3>גרסה קומיקסית</h3>
+              <canvas id="cartoonCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card notes-card">
+        <h2>מה ה‑MVP הזה עושה</h2>
+        <ul>
+          <li>חותך רק קטגוריות <strong>שיער</strong> ו־<strong>עור פנים</strong> מתוך מודל SelfieMulticlass.</li>
+          <li>מוריד צוואר, כתפיים, ידיים ובגדים כברירת מחדל.</li>
+          <li>יכול לשמור גם עגילים / משקפיים דרך מתג "אביזרים".</li>
+          <li>מייצא PNG שקוף מוכן להעברה לשלב הבא שלך.</li>
+        </ul>
+        <p class="note-strong">הערה: שלב ה"קריקטורה" כאן הוא אפקט קומיקסי מהיר בדפדפן, לא עדיין מודל AI קריקטורי מלא.</p>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
