@@ -13,7 +13,7 @@
       <header class="app-header">
         <div>
           <h1>Head Caricature Studio</h1>
-          <p class="subtitle">צילום או העלאה, חיתוך ראש + שיער, ואז בחירה בין 2 סגנונות קריקטורה.</p>
+          <p class="subtitle">צילום או העלאה, חיתוך ראש + שיער, ואז בחירה בין 2 סגנונות קריקטורה אמיתיים מהמחשב שלך.</p>
         </div>
         <button id="installBtn" class="secondary hidden" type="button">הוסף למסך הבית</button>
       </header>
@@ -27,6 +27,22 @@
             <button id="goCameraBtn" class="big-action" type="button">צלם עכשיו</button>
           </div>
           <input id="imageUpload" type="file" accept="image/*" hidden />
+
+          <details class="settings-box">
+            <summary>הגדרות שרת AI</summary>
+            <div class="settings-grid">
+              <label>
+                <span>כתובת שרת</span>
+                <input id="backendUrlInput" type="url" placeholder="https://xxxxx.trycloudflare.com" />
+              </label>
+              <div class="inline-settings">
+                <button id="saveBackendBtn" type="button">שמור כתובת</button>
+                <button id="testBackendBtn" class="secondary" type="button">בדוק חיבור</button>
+              </div>
+              <p class="hint">בדיקות מקומיות: אפשר גם להשתמש ב- <code>http://127.0.0.1:7861</code>. מהאייפד צריך כתובת tunnel חיצונית.</p>
+            </div>
+          </details>
+
           <p id="status" class="status">טוען מודל חיתוך ראש…</p>
         </div>
       </section>
@@ -67,7 +83,7 @@
       <section id="screenStyles" class="card screen hidden">
         <div class="screen-head">
           <h2>בחר סגנון קריקטורה</h2>
-          <p class="hint">אפשר להציג 2 גרסאות שונות לאותו ראש, ולבחור את המועדפת בכל פעם מחדש.</p>
+          <p class="hint">כאן מתקבלות 2 קריקטורות AI אמיתיות מהשרת המקומי שלך.</p>
         </div>
         <div class="styles-grid">
           <article class="style-card">
@@ -79,7 +95,7 @@
           <article class="style-card">
             <div class="preview-wrap"><canvas id="styleBoldCanvas"></canvas></div>
             <h3>מודגש</h3>
-            <p class="hint">קווי מתאר חזקים יותר ומראה קריקטוריסטי בולט.</p>
+            <p class="hint">קריקטורה עם יותר אופי והגזמה.</p>
             <button id="chooseBoldBtn" type="button">בחר מודגש</button>
           </article>
         </div>

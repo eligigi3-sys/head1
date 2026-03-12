@@ -137,3 +137,50 @@ video { object-fit: cover; background: #020617; }
   .guide-inner { width: 58%; height: 72%; }
   .single-canvas-wrap canvas, .preview-wrap canvas { width: 100%; }
 }
+
+
+.settings-box {
+  width: min(100%, 680px);
+  margin-top: 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid rgba(148,163,184,.35);
+  border-radius: 18px;
+  background: rgba(15,23,42,.3);
+}
+.settings-box summary {
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: .75rem;
+}
+.settings-grid {
+  display: grid;
+  gap: .85rem;
+  margin-top: .85rem;
+}
+.settings-grid label span {
+  display: block;
+  margin-bottom: .4rem;
+  font-size: .92rem;
+  color: #cbd5e1;
+}
+.settings-grid input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.35);
+  background: rgba(2,6,23,.55);
+  color: #fff;
+  padding: .85rem 1rem;
+  font-size: 1rem;
+}
+.inline-settings {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+.inline-settings > * {
+  flex: 1 1 180px;
+}
+code {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
