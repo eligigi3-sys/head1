@@ -1,6 +1,8 @@
 import { FilesetResolver, ImageSegmenter } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs';
 
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite';
+const BACKEND_STORAGE_KEY = 'headCaricatureBackendUrl';
+const DEFAULT_BACKEND_URL = localStorage.getItem(BACKEND_STORAGE_KEY) || 'http://127.0.0.1:7861';
 
 const statusEl = document.getElementById('status');
 const installBtn = document.getElementById('installBtn');
@@ -20,6 +22,9 @@ const chooseBoldBtn = document.getElementById('chooseBoldBtn');
 const rerenderStylesBtn = document.getElementById('rerenderStylesBtn');
 const resultTitle = document.getElementById('resultTitle');
 const resultSubtitle = document.getElementById('resultSubtitle');
+const backendUrlInput = document.getElementById('backendUrlInput');
+const saveBackendBtn = document.getElementById('saveBackendBtn');
+const testBackendBtn = document.getElementById('testBackendBtn');
 
 const video = document.getElementById('video');
 const overlayCanvas = document.getElementById('overlayCanvas');
@@ -32,8 +37,6 @@ const resultCanvas = document.getElementById('resultCanvas');
 
 const workingCanvas = document.createElement('canvas');
 const workingCtx = workingCanvas.getContext('2d', { willReadFrequently: true });
-const tempCanvas = document.createElement('canvas');
-const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
 const screens = {
   start: document.getElementById('screenStart'),
@@ -50,6 +53,12 @@ let countdownRunning = false;
 let cachedCutoutDataUrl = null;
 let renderedStyles = { soft: null, bold: null };
 let selectedStyle = null;
+
+backendUrlInput.value = DEFAULT_BACKEND_URL;
+
+function getBackendBaseUrl() {
+  return (backendUrlInput.value || '').trim().replace(/\/$/, '');
+}
 
 function setStatus(message, kind = '') {
   statusEl.textContent = message;
@@ -109,6 +118,26 @@ async function initSegmenter() {
   } catch (error) {
     console.error(error);
     setStatus(`טעינת המודל נכשלה: ${error.message}`, 'error');
+  }
+}
+
+async function pingBackend(showMessage = true) {
+  const base = getBackendBaseUrl();
+  if (!base) {
+    if (showMessage) setStatus('הכנס כתובת שרת AI קודם.', 'error');
+    return false;
+  }
+  try {
+    const res = await fetch(`${base}/health`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error('שרת לא תקין');
+    if (showMessage) setStatus(`שרת AI מחובר: ${base}`, 'ok');
+    return true;
+  } catch (error) {
+    console.error(error);
+    if (showMessage) setStatus(`אין חיבור לשרת AI: ${error.message}`, 'error');
+    return false;
   }
 }
 
@@ -270,11 +299,6 @@ function computeBounds(mask, width, height) {
   };
 }
 
-function quantize(value, levels) {
-  const step = 255 / Math.max(2, levels - 1);
-  return Math.round(value / step) * step;
-}
-
 function blurAlphaMask(ctx, width, height, alphaStrength = 10) {
   const img = ctx.getImageData(0, 0, width, height);
   const src = img.data;
@@ -300,98 +324,6 @@ function blurAlphaMask(ctx, width, height, alphaStrength = 10) {
   ctx.putImageData(img, 0, 0);
 }
 
-function stylizeCanvas(sourceCanvas, targetCanvas, preset = 'soft', seedJitter = 0) {
-  const width = sourceCanvas.width;
-  const height = sourceCanvas.height;
-  fitCanvasToSource(targetCanvas, width, height);
-  const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
-  ctx.clearRect(0, 0, width, height);
-  ctx.drawImage(sourceCanvas, 0, 0);
-
-  const img = ctx.getImageData(0, 0, width, height);
-  const data = img.data;
-  const gray = new Float32Array(width * height);
-
-  const levels = preset === 'soft' ? 7 : 5;
-  const contrast = preset === 'soft' ? 1.08 : 1.22;
-  const saturationBoost = preset === 'soft' ? 1.08 : 1.22;
-  const edgeThreshold = preset === 'soft' ? 105 : 74;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const alpha = data[i + 3] / 255;
-    if (alpha === 0) continue;
-
-    let r = data[i];
-    let g = data[i + 1];
-    let b = data[i + 2];
-
-    r = Math.min(255, Math.max(0, (r - 128) * contrast + 128));
-    g = Math.min(255, Math.max(0, (g - 128) * contrast + 128));
-    b = Math.min(255, Math.max(0, (b - 128) * contrast + 128));
-
-    const avg = (r + g + b) / 3;
-    r = avg + (r - avg) * saturationBoost;
-    g = avg + (g - avg) * saturationBoost;
-    b = avg + (b - avg) * saturationBoost;
-
-    if (preset === 'bold') {
-      r += 10;
-      b -= 4;
-    } else {
-      g += 4;
-      b += 8;
-    }
-
-    const jitter = (seedJitter % 3) * (preset === 'soft' ? 3 : 5);
-    data[i] = quantize(Math.min(255, Math.max(0, r + jitter)), levels);
-    data[i + 1] = quantize(Math.min(255, Math.max(0, g + jitter / 2)), levels);
-    data[i + 2] = quantize(Math.min(255, Math.max(0, b - jitter / 2)), levels);
-    gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-  }
-
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x;
-      const alpha = data[idx * 4 + 3];
-      if (!alpha) continue;
-
-      const gx =
-        -gray[(y - 1) * width + (x - 1)] - 2 * gray[y * width + (x - 1)] - gray[(y + 1) * width + (x - 1)] +
-        gray[(y - 1) * width + (x + 1)] + 2 * gray[y * width + (x + 1)] + gray[(y + 1) * width + (x + 1)];
-      const gy =
-        -gray[(y - 1) * width + (x - 1)] - 2 * gray[(y - 1) * width + x] - gray[(y - 1) * width + (x + 1)] +
-        gray[(y + 1) * width + (x - 1)] + 2 * gray[(y + 1) * width + x] + gray[(y + 1) * width + (x + 1)];
-      const magnitude = Math.sqrt(gx * gx + gy * gy);
-
-      if (magnitude > edgeThreshold) {
-        const di = idx * 4;
-        const ink = preset === 'soft' ? 22 : 0;
-        data[di] = ink;
-        data[di + 1] = ink;
-        data[di + 2] = ink;
-      }
-    }
-  }
-
-  ctx.putImageData(img, 0, 0);
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-over';
-  const grad = ctx.createLinearGradient(0, 0, width, height);
-  if (preset === 'soft') {
-    grad.addColorStop(0, '#f5f3ff');
-    grad.addColorStop(1, '#dbeafe');
-  } else {
-    grad.addColorStop(0, '#fef3c7');
-    grad.addColorStop(1, '#fde68a');
-  }
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
-
-  blurAlphaMask(ctx, width, height, preset === 'soft' ? 12 : 8);
-}
-
 function renderCutoutFromDataUrl() {
   return new Promise((resolve, reject) => {
     if (!cachedCutoutDataUrl) return reject(new Error('No cutout in cache'));
@@ -407,17 +339,77 @@ function renderCutoutFromDataUrl() {
   });
 }
 
+function drawDataUrlToCanvas(dataUrl, canvas) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      fitCanvasToSource(canvas, img.width, img.height);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, img.width, img.height);
+      ctx.drawImage(img, 0, 0);
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+async function getCutoutBlob() {
+  const dataUrl = cachedCutoutDataUrl;
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
+async function generateStylesViaBackend() {
+  const ok = await pingBackend(false);
+  if (!ok) {
+    setStatus('אין חיבור לשרת AI. בדוק את כתובת השרת והפעל אותו מחדש.', 'error');
+    return false;
+  }
+
+  setStatus('יוצר 2 קריקטורות AI… זה לוקח כמה שניות.', 'ok');
+  chooseSoftBtn.disabled = true;
+  chooseBoldBtn.disabled = true;
+  rerenderStylesBtn.disabled = true;
+  continueBtn.disabled = true;
+
+  try {
+    const blob = await getCutoutBlob();
+    const form = new FormData();
+    form.append('image', blob, 'cutout.png');
+    const base = getBackendBaseUrl();
+    const res = await fetch(`${base}/caricature/options`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    renderedStyles.soft = data.soft;
+    renderedStyles.bold = data.bold;
+    await drawDataUrlToCanvas(renderedStyles.soft, styleSoftCanvas);
+    await drawDataUrlToCanvas(renderedStyles.bold, styleBoldCanvas);
+    chooseSoftBtn.disabled = false;
+    chooseBoldBtn.disabled = false;
+    rerenderStylesBtn.disabled = false;
+    continueBtn.disabled = false;
+    setStatus('2 הקריקטורות מוכנות. בחר את הסגנון המועדף.', 'ok');
+    return true;
+  } catch (error) {
+    console.error(error);
+    setStatus(`קריקטורת AI נכשלה: ${error.message}`, 'error');
+    rerenderStylesBtn.disabled = false;
+    return false;
+  }
+}
+
 async function renderStyleOptions() {
   if (!cachedCutoutDataUrl) return;
   await renderCutoutFromDataUrl();
-
-  const seedBase = Date.now() % 7;
-  stylizeCanvas(cutoutCanvas, styleSoftCanvas, 'soft', seedBase);
-  stylizeCanvas(cutoutCanvas, styleBoldCanvas, 'bold', seedBase + 3);
-  renderedStyles.soft = styleSoftCanvas.toDataURL('image/png');
-  renderedStyles.bold = styleBoldCanvas.toDataURL('image/png');
-
-  setStatus('2 האופציות מוכנות. בחר את הסגנון המועדף.', 'ok');
+  showScreen('styles');
+  await generateStylesViaBackend();
 }
 
 async function applySelectedStyle(name) {
@@ -434,7 +426,7 @@ async function applySelectedStyle(name) {
     resultTitle.textContent = name === 'soft' ? 'הקריקטורה שלך — עדין' : 'הקריקטורה שלך — מודגש';
     resultSubtitle.textContent = name === 'soft'
       ? 'גרסה עדינה יותר, נקייה ומחמיאה.'
-      : 'גרסה עם קווים חזקים יותר ומראה קריקטוריסטי מודגש.';
+      : 'גרסה עם יותר אופי והגזמה.';
     showScreen('result');
   };
   img.src = selectedDataUrl;
@@ -518,77 +510,30 @@ async function processUploadedFile(file) {
   const bitmap = await createImageBitmap(file);
   resetWorkflow();
   const sourceCanvas = imageToCanvas(bitmap);
-  drawOverlayBox(null, sourceCanvas.width, sourceCanvas.height);
   await processSource(sourceCanvas);
 }
 
-async function runCountdownCapture() {
-  if (countdownRunning || !video.videoWidth || !video.videoHeight) return;
+async function captureWithCountdown() {
+  if (countdownRunning) return;
   countdownRunning = true;
   captureAutoBtn.disabled = true;
   countdownEl.classList.remove('hidden');
 
-  for (const value of ['3', '2', '1']) {
-    countdownEl.textContent = value;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  for (const step of ['3', '2', '1']) {
+    countdownEl.textContent = step;
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
 
-  countdownEl.textContent = '📸';
-  await new Promise((resolve) => setTimeout(resolve, 350));
+  countdownEl.textContent = '✓';
+  await new Promise((resolve) => setTimeout(resolve, 200));
   countdownEl.classList.add('hidden');
-
-  const source = getSourceImageFromVideo();
-  resetWorkflow();
-  await processSource(source);
   countdownRunning = false;
+
+  resetWorkflow();
+  const sourceCanvas = getSourceImageFromVideo();
+  await processSource(sourceCanvas);
   captureAutoBtn.disabled = false;
 }
-
-async function openCameraScreen() {
-  showScreen('camera');
-  const started = await startCamera();
-  if (!started) showScreen('start');
-}
-
-function resetToCamera() {
-  resetWorkflow();
-  showScreen('camera');
-  if (!stream) startCamera();
-}
-
-goCameraBtn.addEventListener('click', openCameraScreen);
-backToStartBtn.addEventListener('click', () => {
-  stopCamera();
-  drawOverlayBox(null, overlayCanvas.width || 0, overlayCanvas.height || 0);
-  resetWorkflow();
-  showScreen('start');
-});
-
-captureAutoBtn.addEventListener('click', runCountdownCapture);
-continueBtn.addEventListener('click', async () => {
-  showScreen('styles');
-  await renderStyleOptions();
-});
-restartBtn.addEventListener('click', resetToCamera);
-restartFromStylesBtn.addEventListener('click', resetToCamera);
-restartFromResultBtn.addEventListener('click', resetToCamera);
-backToStylesBtn.addEventListener('click', () => showScreen('styles'));
-rerenderStylesBtn.addEventListener('click', renderStyleOptions);
-chooseSoftBtn.addEventListener('click', () => applySelectedStyle('soft'));
-chooseBoldBtn.addEventListener('click', () => applySelectedStyle('bold'));
-
-imageUpload.addEventListener('change', async (event) => {
-  const [file] = event.target.files || [];
-  if (!file) return;
-  stopCamera();
-  await processUploadedFile(file);
-  imageUpload.value = '';
-});
-
-exportBtn.addEventListener('click', () => {
-  if (!selectedStyle || !renderedStyles[selectedStyle]) return;
-  triggerDownload(renderedStyles[selectedStyle], `head-caricature-${selectedStyle}-${Date.now()}.png`);
-});
 
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
@@ -604,13 +549,84 @@ installBtn.addEventListener('click', async () => {
   installBtn.classList.add('hidden');
 });
 
+saveBackendBtn.addEventListener('click', () => {
+  localStorage.setItem(BACKEND_STORAGE_KEY, getBackendBaseUrl());
+  setStatus('כתובת שרת ה-AI נשמרה.', 'ok');
+});
+
+testBackendBtn.addEventListener('click', async () => {
+  localStorage.setItem(BACKEND_STORAGE_KEY, getBackendBaseUrl());
+  await pingBackend(true);
+});
+
+goCameraBtn.addEventListener('click', async () => {
+  showScreen('camera');
+  await startCamera();
+});
+
+backToStartBtn.addEventListener('click', () => {
+  stopCamera();
+  showScreen('start');
+});
+
+captureAutoBtn.addEventListener('click', captureWithCountdown);
+
+imageUpload.addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  await processUploadedFile(file);
+  imageUpload.value = '';
+});
+
+continueBtn.addEventListener('click', async () => {
+  await renderStyleOptions();
+});
+
+restartBtn.addEventListener('click', async () => {
+  resetWorkflow();
+  showScreen('camera');
+  await startCamera();
+});
+
+restartFromStylesBtn.addEventListener('click', async () => {
+  resetWorkflow();
+  showScreen('camera');
+  await startCamera();
+});
+
+restartFromResultBtn.addEventListener('click', async () => {
+  resetWorkflow();
+  showScreen('camera');
+  await startCamera();
+});
+
+rerenderStylesBtn.addEventListener('click', async () => {
+  await generateStylesViaBackend();
+});
+
+chooseSoftBtn.addEventListener('click', async () => {
+  await applySelectedStyle('soft');
+});
+
+chooseBoldBtn.addEventListener('click', async () => {
+  await applySelectedStyle('bold');
+});
+
+backToStylesBtn.addEventListener('click', () => {
+  showScreen('styles');
+});
+
+exportBtn.addEventListener('click', () => {
+  triggerDownload(resultCanvas.toDataURL('image/png'), `caricature-${selectedStyle || 'final'}.png`);
+});
+
 window.addEventListener('resize', syncOverlaySize);
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((error) => console.warn('SW registration failed', error));
+    navigator.serviceWorker.register('sw.js').catch((error) => console.warn('SW registration failed', error));
   });
 }
 
-await initSegmenter();
-showScreen('start');
+initSegmenter();
+pingBackend(false);
